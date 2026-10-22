@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 )
 
@@ -31,6 +32,7 @@ type Machine struct {
 	ID      uint
 	Process MachineProcess
 	State   MachineState
+	mu      sync.Mutex
 }
 type Furnace struct {
 	Temperature       float64
@@ -62,11 +64,15 @@ func (f *Furnace) Step() {
 	}
 }
 func (m *Machine) Start() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.State == MachineOFF || m.State == MachineWaiting {
 		m.State = MachineWorking
 	}
 }
 func (m *Machine) Stop() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if m.State == MachineWorking {
 		m.State = MachineWaiting
 	}
@@ -75,7 +81,10 @@ func (m *Machine) Run() {
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 	for t := range ticker.C {
-		if m.State == MachineWorking {
+		m.mu.Lock()
+		isWorking := m.State == MachineWorking
+		m.mu.Unlock()
+		if isWorking {
 			m.Process.Step()
 			fmt.Println("Tick:", t)
 			fmt.Println(m.Process)
@@ -98,6 +107,16 @@ func main() {
 			fmt.Fprintln(w, "Машина Запущена")
 		}
 
+	})
+	http.HandleFunc("/stop", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			fmt.Fprintln(w, "Ожиадется метод POST")
+		} else {
+			machine.Stop()
+			fmt.Fprintln(w, "Машина остановлена")
+		}
 	})
 	http.ListenAndServe(":8081", nil)
 }
