@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"time"
 )
 
@@ -83,7 +84,20 @@ func (m *Machine) Run() {
 }
 func main() {
 	furnace := &Furnace{Temperature: 25, TargetTemperature: 50, Stage: FurnaceHeat}
-	machine := Machine{Name: "FU", ID: 1, Process: furnace, State: MachineWorking}
-	//machine.Process.Step()
-	machine.Run()
+	machine := Machine{Name: "FU", ID: 1, Process: furnace, State: MachineWaiting}
+
+	go machine.Run()
+
+	http.HandleFunc("/start", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			fmt.Fprintln(w, "Ожидается метод POST")
+		} else {
+			machine.Start()
+			fmt.Fprintln(w, "Машина Запущена")
+		}
+
+	})
+	http.ListenAndServe(":8081", nil)
 }
